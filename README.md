@@ -31,7 +31,7 @@ A REST API written in Python with account management functionality.
     "password": "secret"
 }
 ```
-### /api/user/<id>
+### /api/user/\<id>
 - `GET`: retrieve information about user with <id>
 - `PUT`: update user information. Current user password is required, and account information is updated if specified. Example updating name and password:
 ```json

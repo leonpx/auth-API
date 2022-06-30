@@ -3,11 +3,6 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_restful import Api, Resource, reqparse
 import re, logging, sys, bcrypt
 
-# Set up debug logging for authlib
-log = logging.getLogger('authlib')
-log.addHandler(logging.StreamHandler(sys.stdout))
-log.setLevel(logging.DEBUG)
-
 # Set upp Flask app, API and database
 app = Flask(__name__)
 api = Api(app)
@@ -34,7 +29,6 @@ class User(db.Model):
             return True
         else:
             return False
-
 
     def __repr__(self):
         return f'<User {self.name}:{self.email}>'
