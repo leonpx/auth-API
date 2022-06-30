@@ -215,4 +215,4 @@ api.add_resource(Logout, '/session/logout/', methods=['POST'])
 api.add_resource(Filter, '/api/user/filter', '/api/user/filter/<name>', methods=['GET'])
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=False)
