@@ -24,20 +24,20 @@ A REST API written in Python with account management functionality.
 ### /api/user
 - `GET`: retrieve all registered users and their information
 - `POST`: register a new user. Name, Email and Password in JSON format required, example:
-```
+```json
 {
     "name": "Name name",
-    "email": "name@mail.com,
+    "email": "name@mail.com",
     "password": "secret"
 }
 ```
 ### /api/user/<id>
 - `GET`: retrieve information about user with <id>
 - `PUT`: update user information. Current user password is required, and account information is updated if specified. Example updating name and password:
-```
+```json
 {
     "name": "Name name",
-    "current_password": "secret"
+    "current_password": "secret",
     "new_password": "new_secret"
 }
 ```
