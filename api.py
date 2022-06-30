@@ -1,7 +1,7 @@
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 from flask_restful import Api, Resource, reqparse
-import re, logging, sys, bcrypt
+import re, logging, sys, bcrypt, secrets
 
 # Set upp Flask app, API and database
 app = Flask(__name__)
@@ -16,10 +16,16 @@ class User(db.Model):
     name = db.Column(db.String(255), nullable=False)
     email = db.Column(db.String(255), unique=True, nullable=False)
     password = db.Column(db.String(255), nullable=False)
+    session_token = db.Column(db.String(255), nullable=True)
 
     # Help function to convert a User object into JSON
     def user_JSON(self):
         response = {'user': {'id': self.id, 'name': self.name, 'email': self.email}}
+        return response
+
+    # Help function to convert a User object into JSON also containing session token
+    def user_JSON_login(self):
+        response = {'user': {'id': self.id, 'name': self.name, 'email': self.email}, "session_token": self.session_token}
         return response
 
     # Help function with verifies the given password of a user
@@ -117,7 +123,7 @@ class UserAPI(Resource):
             db.session.commit()
         else:
             return self.msg_invalid_password
-        return '', 200
+        return '', 204
 
     # Deletes a user, given the correct user password
     def delete(self, user_id):
@@ -151,7 +157,34 @@ class Login(Resource):
         elif not user.verify_password(args['password']):
             return self.msg_invalid_credentials
 
-        return user.user_JSON(), 200
+        if user.session_token is None: 
+            session_token = secrets.token_urlsafe()
+            user.session_token = session_token
+            db.session.commit()
+
+        return user.user_JSON_login(), 200
+
+# API class that handles a logout request
+class Logout(Resource):
+    def __init__(self):
+        # Arguments required to be sent in the body of a POST to /session/login
+        self.post_args = reqparse.RequestParser()
+        self.post_args.add_argument("session_token", type=str, help="Session token is required.", required=True)
+
+        # Predefined HTTP responses
+        self.msg_invalid_credentials = {"message": "Invalid token."}, 401
+
+    def post(self):
+        args = self.post_args.parse_args()
+        user = User.query.filter_by(session_token=args['session_token']).first()
+        if user is None: 
+            return self.msg_invalid_credentials
+
+        user.session_token = None
+        db.session.commit()
+
+        return '', 204
+
 
 # API class that handles a filtered search
 class Filter(Resource):
@@ -178,6 +211,7 @@ class Filter(Resource):
 api.add_resource(UsersAPI, '/api/user/', methods=['GET', 'POST'])
 api.add_resource(UserAPI, '/api/user/', '/api/user/<int:user_id>', methods=['GET', 'PUT', 'DELETE'])
 api.add_resource(Login, '/session/login/', methods=['POST'])
+api.add_resource(Logout, '/session/logout/', methods=['POST'])
 api.add_resource(Filter, '/api/user/filter', '/api/user/filter/<name>', methods=['GET'])
 
 if __name__ == '__main__':

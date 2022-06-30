@@ -48,7 +48,7 @@ A REST API written in Python with account management functionality.
 <webserver>/api/user/filter?name=Adam
 ```
 ### /api/session/login
-- `POST`: create a new session. Account email and password is required.
+- `POST`: create a new session. Account email and password is required. Session token is returned upon successful login.
 ### /api/session/logout
-- `POST`: end a session. Authentication token is required.
+- `POST`: end a session. Session token is required.
 
