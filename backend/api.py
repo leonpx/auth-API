@@ -1,4 +1,4 @@
-from flask import Flask
+from flask import Flask 
 from flask_sqlalchemy import SQLAlchemy
 from flask_restful import Api, Resource, reqparse
 import re, logging, sys, bcrypt, secrets
@@ -43,7 +43,7 @@ class User(db.Model):
 def users_JSON(users):
         response = {'users': []}
         for user in users:
-            response['users'].append({'id': user.id, 'name': user.name, 'email': user.email})
+            response['users'].append({'id': user.id, 'name': user.name})
         return response
 
 # Help function with checks whether an email is already taken
@@ -68,11 +68,6 @@ class UsersAPI(Resource):
         self.post_args.add_argument("email", type=str, help="User email is required.", required=True)
         self.post_args.add_argument("password", type=str, help="Account password is required.", required=True)
 
-    # Returns information about all users in the database, in JSON format
-    def get(self):
-        users = User.query.all()
-        return users_JSON(users)
-
     # Adds a new user, if the email is not already taken
     def post(self):
         args = self.post_args.parse_args()
@@ -87,6 +82,9 @@ class UsersAPI(Resource):
 # API class that handles a specific user
 class UserAPI(Resource):
     def __init__(self):
+        self.get_args = reqparse.RequestParser()
+        self.get_args.add_argument("sessiontoken", type=str, location="headers", help="Session token is required.", required=True)
+
         # Argument reguired to be sent in the body of a DELETE to /api/user/<id>
         self.delete_args = reqparse.RequestParser()
         self.delete_args.add_argument("password", type=str, help="Account password is required.", required=True)
@@ -101,11 +99,21 @@ class UserAPI(Resource):
         # Predefined HTTP responses
         self.msg_user_not_found = {"message": "User not found."}, 404
         self.msg_invalid_password = {"message": "Invalid password."}, 401
+        self.msg_invalid_token = {"message": "Invalid token."}, 401
+        self.msg_not_signed_in = {"message": "User is not signed in."}, 401
 
     # Returns information about a specific user, specified by the user_id, presented in JSON format
     def get(self, user_id):
+        args = self.get_args.parse_args()
         user = User.query.get(user_id)
-        if user is None: return self.msg_user_not_found
+        if user is None: 
+            return self.msg_user_not_found
+        elif user.session_token is None: 
+            return self.msg_not_signed_in
+        
+        if user.session_token != args['sessiontoken']:
+            return self.msg_invalid_token
+
         return user.user_JSON()
 
     # Updates the information of a user, given the correct current password of the user
@@ -169,16 +177,16 @@ class Logout(Resource):
     def __init__(self):
         # Arguments required to be sent in the body of a POST to /session/login
         self.post_args = reqparse.RequestParser()
-        self.post_args.add_argument("session_token", type=str, help="Session token is required.", required=True)
+        self.post_args.add_argument("sessiontoken", type=str, location="headers", help="Session token is required.", required=True)
 
         # Predefined HTTP responses
-        self.msg_invalid_credentials = {"message": "Invalid token."}, 401
+        self.msg_invalid_token = {"message": "Invalid token."}, 401
 
     def post(self):
         args = self.post_args.parse_args()
-        user = User.query.filter_by(session_token=args['session_token']).first()
+        user = User.query.filter_by(session_token=args['sessiontoken']).first()
         if user is None: 
-            return self.msg_invalid_credentials
+            return self.msg_invalid_token
 
         user.session_token = None
         db.session.commit()
@@ -208,7 +216,7 @@ class Filter(Resource):
 
         return users_JSON(result), 200
 
-api.add_resource(UsersAPI, '/api/user/', methods=['GET', 'POST'])
+api.add_resource(UsersAPI, '/api/user/', methods=['POST'])
 api.add_resource(UserAPI, '/api/user/', '/api/user/<int:user_id>', methods=['GET', 'PUT', 'DELETE'])
 api.add_resource(Login, '/session/login/', methods=['POST'])
 api.add_resource(Logout, '/session/logout/', methods=['POST'])
