@@ -1,12 +1,14 @@
 from flask import Flask 
 from flask_sqlalchemy import SQLAlchemy
 from flask_restful import Api, Resource, reqparse
-import re, logging, sys, bcrypt, secrets
+from email.message import EmailMessage
+import re, logging, sys, bcrypt, secrets, smtplib
 
 # Set upp Flask app, API and database
 app = Flask(__name__)
 api = Api(app)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///data.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['BUNDLE_ERRORS'] = True
 db = SQLAlchemy(app)
 
@@ -16,7 +18,8 @@ class User(db.Model):
     name = db.Column(db.String(255), nullable=False)
     email = db.Column(db.String(255), unique=True, nullable=False)
     password = db.Column(db.String(255), nullable=False)
-    session_token = db.Column(db.String(255), nullable=True)
+    session_token = db.Column(db.String(255))
+    reset_token = db.Column(db.String(255))
 
     # Help function to convert a User object into JSON
     def user_JSON(self):
@@ -28,7 +31,7 @@ class User(db.Model):
         response = {'user': {'id': self.id, 'name': self.name, 'email': self.email}, "session_token": self.session_token}
         return response
 
-    # Help function with verifies the given password of a user
+    # Help function which verifies the given password of a user
     def verify_password(self, password):
         password = password.encode('utf-8')
         if bcrypt.checkpw(password, self.password):
@@ -46,14 +49,7 @@ def users_JSON(users):
             response['users'].append({'id': user.id, 'name': user.name})
         return response
 
-# Help function with checks whether an email is already taken
-def email_taken(email):
-    user_query = User.query.filter_by(email=email).first()
-    if user_query is None:
-        return False
-    else:
-        return True
-
+# Help function which hashes password string, and returns the hashed password
 def hash_password(password):
     password = password.encode('utf-8')
     hashed_password = bcrypt.hashpw(password, bcrypt.gensalt(10))
@@ -68,10 +64,18 @@ class UsersAPI(Resource):
         self.post_args.add_argument("email", type=str, help="User email is required.", required=True)
         self.post_args.add_argument("password", type=str, help="Account password is required.", required=True)
 
+    # Help function which checks whether an email is already taken
+    def email_taken(self, email):
+        user_query = User.query.filter_by(email=email).first()
+        if user_query is None:
+            return False
+        else:
+            return True
+
     # Adds a new user, if the email is not already taken
     def post(self):
         args = self.post_args.parse_args()
-        if email_taken(args['email']):
+        if self.email_taken(args['email']):
             return {"message": "Email already taken."}, 200
         hashed_password = hash_password(args['password']) 
         new_user = User(name=args['name'], email=args['email'], password=hashed_password)
@@ -104,7 +108,7 @@ class UserAPI(Resource):
 
     # Returns information about a specific user, specified by the user_id, presented in JSON format
     def get(self, user_id):
-        args = self.get_args.parse_args()
+        sessiontoken = self.get_args.parse_args()['sessiontoken']
         user = User.query.get(user_id)
         if user is None: 
             return self.msg_user_not_found
@@ -115,23 +119,6 @@ class UserAPI(Resource):
             return self.msg_invalid_token
 
         return user.user_JSON()
-
-    # Updates the information of a user, given the correct current password of the user
-    def put(self, user_id):
-        user = User.query.get(user_id)
-        if user is None: return self.msg_user_not_found
-        args = self.post_args.parse_args()
-        if user.verify_password(args['current_password']):
-            if args['new_password'] is not None:
-                user.password = hash_password(args['new_password'])
-            if args['name'] is not None:
-                user.name = args['name']
-            if args['email'] is not None:
-                user.email = args['email']
-            db.session.commit()
-        else:
-            return self.msg_invalid_password
-        return '', 204
 
     # Deletes a user, given the correct user password
     def delete(self, user_id):
@@ -157,6 +144,7 @@ class Login(Resource):
         # Predefined HTTP responses
         self.msg_invalid_credentials = {"message": "Invalid email or password."}, 401
 
+    # Log in user, parses email and password as JSON args
     def post(self):
         args = self.post_args.parse_args()
         user = User.query.filter_by(email=args['email']).first()
@@ -180,11 +168,12 @@ class Logout(Resource):
         self.post_args.add_argument("sessiontoken", type=str, location="headers", help="Session token is required.", required=True)
 
         # Predefined HTTP responses
-        self.msg_invalid_token = {"message": "Invalid token."}, 401
+        self.msg_invalid_token = {"message": "Invalid session token."}, 401
 
+    # Log out user, parses session_token from request headers
     def post(self):
-        args = self.post_args.parse_args()
-        user = User.query.filter_by(session_token=args['sessiontoken']).first()
+        sessiontoken = self.post_args.parse_args()['sessiontoken']
+        user = User.query.filter_by(session_token=sessiontoken).first()
         if user is None: 
             return self.msg_invalid_token
 
@@ -193,6 +182,56 @@ class Logout(Resource):
 
         return '', 204
 
+class ResetPassword(Resource):
+    def __init__(self):
+        # Arguments required to be sent in the body of a POST to /api/user/password
+        self.post_args = reqparse.RequestParser()
+        self.post_args.add_argument("email", type=str, help="User email is required.", required=True)
+
+        # Arguments required to be sent in the body of a PUT to /api/user/password
+        self.put_args = reqparse.RequestParser()
+        self.put_args.add_argument("reset_token", type=str, help="Password reset token is required.", required=True)
+        self.put_args.add_argument("new_password", type=str, help="New user password is required.", required=True)
+
+        # Predefined HTTP responses
+        self.msg_invalid_email = {"message": "No user with that email exists."}, 400
+        self.msg_invalid_token = {"message": "Invalid reset token."}, 401
+
+    def email_reset_token(self, resettoken, email):
+        msg = EmailMessage()
+        body = f"A password reset for your account has been requested.\nPlease reset your password using the reset token <{resettoken}>. " + \
+        "If you did not request a password reset, please ignore this message."
+        msg.set_content(body)
+        msg['subject'] = "Password reset requested for your account"
+        msg['From'] = "noreply@domain.com"
+        msg['To'] = email
+
+        s = smtplib.SMTP('localhost', 1025)
+        s.send_message(msg)
+        s.quit()
+
+    # Request a passwor reset, which sends a password reset token to the user
+    def post(self):
+        email = self.post_args.parse_args()['email']
+        user = User.query.filter_by(email=email).first()
+        if user is None: return self.msg_invalid_email
+        resettoken = secrets.token_urlsafe()
+        user.reset_token = resettoken
+        db.session.commit()
+        self.email_reset_token(resettoken, email)
+        return {"message": "Reset email has been sent."}, 202
+
+    # Rests the user password using their password reset token
+    def put(self):
+        args = self.put_args.parse_args()
+        user = User.query.filter_by(reset_token=args['reset_token']).first()
+        if user is None: 
+            return self.msg_invalid_token
+        elif user.reset_token != args['reset_token']:
+            return self.msg_invalid_token
+        user.password = hash_password(args['new_password']) 
+        db.session.commit()
+        return {"message": "Password reset. Please login using new password."}, 200
 
 # API class that handles a filtered search
 class Filter(Resource):
@@ -205,7 +244,6 @@ class Filter(Resource):
     # Searches the database for a match given the name of sought after user
     # Search is case-insensitive
     def get(self):
-        #args = request.args
         args = self.post_args.parse_args()
         print(args)
         users = User.query.all()
@@ -216,11 +254,12 @@ class Filter(Resource):
 
         return users_JSON(result), 200
 
-api.add_resource(UsersAPI, '/api/user/', methods=['POST'])
-api.add_resource(UserAPI, '/api/user/', '/api/user/<int:user_id>', methods=['GET', 'PUT', 'DELETE'])
+api.add_resource(UsersAPI, '/api/users/', methods=['POST'])
+api.add_resource(UserAPI, '/api/user/', '/api/user/<int:user_id>', methods=['GET', 'DELETE'])
 api.add_resource(Login, '/session/login/', methods=['POST'])
 api.add_resource(Logout, '/session/logout/', methods=['POST'])
 api.add_resource(Filter, '/api/user/filter', '/api/user/filter/<name>', methods=['GET'])
+api.add_resource(ResetPassword, '/api/user/password', methods=['POST', 'PUT'])
 
 if __name__ == '__main__':
     app.run(debug=False)

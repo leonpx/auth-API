@@ -1,0 +1,3 @@
+#!/bin/bash
+
+(trap 'kill 0' SIGINT; python -m smtpd -n -c DebuggingServer localhost:1025 & python backend/api.py)
