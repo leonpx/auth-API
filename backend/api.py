@@ -28,7 +28,7 @@ class User(db.Model):
 
     # Help function to convert a User object into JSON also containing session token
     def user_JSON_login(self):
-        response = {'user': {'id': self.id, 'name': self.name, 'email': self.email}, "session_token": self.session_token}
+        response = {'user': {'id': self.id, 'name': self.name, 'email': self.email}, "session-token": self.session_token}
         return response
 
     # Help function which verifies the given password of a user
@@ -87,7 +87,7 @@ class UsersAPI(Resource):
 class UserAPI(Resource):
     def __init__(self):
         self.get_args = reqparse.RequestParser()
-        self.get_args.add_argument("sessiontoken", type=str, location="headers", help="Session token is required.", required=True)
+        self.get_args.add_argument("session-token", type=str, location="headers", help="Session token is required.", required=True)
 
         # Argument reguired to be sent in the body of a DELETE to /api/user/<id>
         self.delete_args = reqparse.RequestParser()
@@ -108,17 +108,17 @@ class UserAPI(Resource):
 
     # Returns information about a specific user, specified by the user_id, presented in JSON format
     def get(self, user_id):
-        sessiontoken = self.get_args.parse_args()['sessiontoken']
+        session_token = self.get_args.parse_args()['session-token']
         user = User.query.get(user_id)
         if user is None: 
             return self.msg_user_not_found
         elif user.session_token is None: 
             return self.msg_not_signed_in
         
-        if user.session_token != args['sessiontoken']:
+        if user.session_token != session_token:
             return self.msg_invalid_token
 
-        return user.user_JSON()
+        return user.user_JSON(), 200
 
     # Deletes a user, given the correct user password
     def delete(self, user_id):
@@ -165,15 +165,15 @@ class Logout(Resource):
     def __init__(self):
         # Arguments required to be sent in the body of a POST to /session/login
         self.post_args = reqparse.RequestParser()
-        self.post_args.add_argument("sessiontoken", type=str, location="headers", help="Session token is required.", required=True)
+        self.post_args.add_argument("session-token", type=str, location="headers", help="Session token is required.", required=True)
 
         # Predefined HTTP responses
         self.msg_invalid_token = {"message": "Invalid session token."}, 401
 
     # Log out user, parses session_token from request headers
     def post(self):
-        sessiontoken = self.post_args.parse_args()['sessiontoken']
-        user = User.query.filter_by(session_token=sessiontoken).first()
+        session_token = self.post_args.parse_args()['session-token']
+        user = User.query.filter_by(session_token=session_token).first()
         if user is None: 
             return self.msg_invalid_token
 
@@ -230,6 +230,7 @@ class ResetPassword(Resource):
         elif user.reset_token != args['reset_token']:
             return self.msg_invalid_token
         user.password = hash_password(args['new_password']) 
+        user.reset_token = None
         db.session.commit()
         return {"message": "Password reset. Please login using new password."}, 200
 
@@ -245,9 +246,10 @@ class Filter(Resource):
     # Search is case-insensitive
     def get(self):
         args = self.post_args.parse_args()
-        print(args)
         users = User.query.all()
         result = []
+        name = args['name'].split('+')
+        name = ' '.join(name)
         for user in users:
             if re.search(args['name'], user.name, re.IGNORECASE):
                 result.append(user)
@@ -256,8 +258,8 @@ class Filter(Resource):
 
 api.add_resource(UsersAPI, '/api/users/', methods=['POST'])
 api.add_resource(UserAPI, '/api/user/', '/api/user/<int:user_id>', methods=['GET', 'DELETE'])
-api.add_resource(Login, '/session/login/', methods=['POST'])
-api.add_resource(Logout, '/session/logout/', methods=['POST'])
+api.add_resource(Login, '/api/session/login/', methods=['POST'])
+api.add_resource(Logout, '/api/session/logout/', methods=['POST'])
 api.add_resource(Filter, '/api/user/filter', '/api/user/filter/<name>', methods=['GET'])
 api.add_resource(ResetPassword, '/api/user/password', methods=['POST', 'PUT'])
 

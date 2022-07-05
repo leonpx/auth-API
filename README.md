@@ -25,14 +25,14 @@ Host: 127.0.0.1:5000
 sessiontoken: <secret>
 ```
 - `DELETE`: deletes a user. User password is required.
-### /api/user/password/reset
+### /api/user/password
 - `POST`: request a new user password. Account email is required. A reset token will be sent to the specified email.
 - `PUT`: reset the password of a user. Reset token and new password is required.
 
 ### /api/user/filter
-- `GET`: queries the database for users that match the given name as URL parameter. Example:
+- `GET`: queries the database for users that match the given name as URL parameter. Spaces are delimited by a plus sign. Example:
 ```
-<webserver>/api/user/filter?name=Adam
+<webserver>/api/user/filter?name=Adam+Smith
 ```
 ### /api/session/login
 - `POST`: create a new session. Account email and password is required. Session token is returned upon successful login.
