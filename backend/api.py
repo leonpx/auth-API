@@ -4,6 +4,15 @@ from flask_restful import Api, Resource, reqparse
 from email.message import EmailMessage
 import re, logging, sys, bcrypt, secrets, smtplib
 
+################################################################
+#
+#
+#           Authentication API
+#           Author: Leon Philip
+#
+#
+################################################################
+
 # Set upp Flask app, API and database
 app = Flask(__name__)
 api = Api(app)
@@ -12,7 +21,7 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['BUNDLE_ERRORS'] = True
 db = SQLAlchemy(app)
 
-# Define how a User is represented in the database
+# Class which defined how a user is represented in the database
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(255), nullable=False)
@@ -40,7 +49,7 @@ class User(db.Model):
             return False
 
     def __repr__(self):
-        return f'<User {self.name}:{self.email}>'
+        return f'<User {self.name}:{self.id}>'
 
 # Help function to convert a Users object into JSON
 def users_JSON(users):
@@ -55,7 +64,8 @@ def hash_password(password):
     hashed_password = bcrypt.hashpw(password, bcrypt.gensalt(10))
     return hashed_password
 
-# API class that handles all users
+# API class which handles requests sent to /api/users.
+# Available method is POST, which registers a new user.
 class UsersAPI(Resource):
     def __init__(self):
         # Arguments required to be sent in the body of a POST to /api/users
@@ -72,7 +82,10 @@ class UsersAPI(Resource):
         else:
             return True
 
-    # Adds a new user, if the email is not already taken
+    # Registers a new user, if the email is not already taken
+    # Responses: 
+    # Success: HTTP status code 201, along with user information in JSON format
+    # Failure: HTTP status code 200 - Email already taken
     def post(self):
         args = self.post_args.parse_args()
         if self.email_taken(args['email']):
@@ -83,7 +96,8 @@ class UsersAPI(Resource):
         db.session.commit()
         return new_user.user_JSON(), 201
 
-# API class that handles a specific user
+# API class that handles requests sents to /api/user/<id>.
+# Available methods are GET and DELETE.
 class UserAPI(Resource):
     def __init__(self):
         self.get_args = reqparse.RequestParser()
@@ -107,6 +121,13 @@ class UserAPI(Resource):
         self.msg_not_signed_in = {"message": "User is not signed in."}, 401
 
     # Returns information about a specific user, specified by the user_id, presented in JSON format
+    # Requires session-token, and therefore also requires the user to be signed in.
+    # Responses: 
+    # Success: HTTP status code 200, along with user information in JSON format
+    # Failure: HTTP status code 404: User not found - the specified user id does not exist.
+    #          HTTP status code 401: Invalid password - specified password is invalid
+    #          HTTP status code 401: Invalid token - specified session token is invalid
+    #          HTTP status code 401: User is not signed in
     def get(self, user_id):
         session_token = self.get_args.parse_args()['session-token']
         user = User.query.get(user_id)
@@ -121,6 +142,11 @@ class UserAPI(Resource):
         return user.user_JSON(), 200
 
     # Deletes a user, given the correct user password
+    # Requires user password in request body
+    # Responses:
+    # Success: HTTP status code 200, along with message "<user> deleted."
+    # Failure: HTTP status code 404: User not found - the specified user id does not exist.
+    #          HTTP status code 401: Invalid password - specified password is invalid
     def delete(self, user_id):
         user = User.query.get(user_id)
         if user is None: return self.msg_user_not_found
@@ -133,7 +159,8 @@ class UserAPI(Resource):
 
         return self.msg_invalid_password        
 
-# API class that handles a login request
+# API class that handles requests sent ot /api/session/login
+# Available method is POST, which signs in a user.
 class Login(Resource):
     def __init__(self):
         # Arguments required to be sent in the body of a POST to /session/login
@@ -144,7 +171,11 @@ class Login(Resource):
         # Predefined HTTP responses
         self.msg_invalid_credentials = {"message": "Invalid email or password."}, 401
 
-    # Log in user, parses email and password as JSON args
+    # Log in user.
+    # Requires email and password in request body.
+    # Responses:
+    # Success: HTTP status code 200, along with session token in addition to user information 
+    # Failure: HTTP status code 401: Invalid email or password - either email or password is invalid
     def post(self):
         args = self.post_args.parse_args()
         user = User.query.filter_by(email=args['email']).first()
@@ -160,7 +191,8 @@ class Login(Resource):
 
         return user.user_JSON_login(), 200
 
-# API class that handles a logout request
+# API class that handles requests sent to /api/session/logout
+# Available method is POST, which sign out user.
 class Logout(Resource):
     def __init__(self):
         # Arguments required to be sent in the body of a POST to /session/login
@@ -170,7 +202,11 @@ class Logout(Resource):
         # Predefined HTTP responses
         self.msg_invalid_token = {"message": "Invalid session token."}, 401
 
-    # Log out user, parses session_token from request headers
+    # Log out user.
+    # requires session-token in headers
+    # Responses: 
+    # Success: HTTP status code 204, empty body
+    # Failure: HTTP status code 401: invalid session token - specified session token is invalid
     def post(self):
         session_token = self.post_args.parse_args()['session-token']
         user = User.query.filter_by(session_token=session_token).first()
@@ -182,6 +218,9 @@ class Logout(Resource):
 
         return '', 204
 
+# API class that handles requests sent to /api/user/password/reset.
+# Available methods are POST and PUT. POST requests a reset token, and PUT resets
+# a users password using the provided reset token.
 class ResetPassword(Resource):
     def __init__(self):
         # Arguments required to be sent in the body of a POST to /api/user/password
@@ -197,6 +236,7 @@ class ResetPassword(Resource):
         self.msg_reset_request = {"message": "If an account with that email exists, an email has been sent with a reset token."}, 202
         self.msg_invalid_token = {"message": "Invalid reset token."}, 401
 
+    # Sends reset token to specified email
     def email_reset_token(self, resettoken, email):
         msg = EmailMessage()
         body = f"A password reset for your account has been requested.\nPlease reset your password using the reset token <{resettoken}>. " + \
@@ -210,7 +250,9 @@ class ResetPassword(Resource):
         s.send_message(msg)
         s.quit()
 
-    # Request a passwor reset, which sends a password reset token to the user
+    # Request a password reset, which sends a password reset token to the user
+    # Requires user email, and only successfully sends a password reset token if the email is valid
+    # Response: HTTP status code 202. Response does not reveal validity of email.
     def post(self):
         email = self.post_args.parse_args()['email']
         user = User.query.filter_by(email=email).first()
@@ -221,7 +263,11 @@ class ResetPassword(Resource):
             self.email_reset_token(resettoken, email)
         return self.msg_reset_request
 
-    # Rests the user password using their password reset token
+    # Resets the user password using the provided password reset token
+    # Requires reset_token and new_password in request body
+    # Responses:
+    # Success: HTTP status code 200, "Password reset"
+    # Failure: HTTP status code 401: Invalid reset token - specified reset token is invalid
     def put(self):
         args = self.put_args.parse_args()
         user = User.query.filter_by(reset_token=args['reset_token']).first()
@@ -234,7 +280,9 @@ class ResetPassword(Resource):
         db.session.commit()
         return {"message": "Password reset. Please login using new password."}, 200
 
-# API class that handles a filtered search
+# API class that handles requests sent to /api/user/filter.
+# Filters users in database based on given query, and returns all users that match.
+# Available method is GET.
 class Filter(Resource):
     def __init__(self):
         pass
@@ -243,7 +291,9 @@ class Filter(Resource):
         self.post_args.add_argument("name", type=str, location="args", help="Name of user is required in search.", required=True)
 
     # Searches the database for a match given the name of sought after user
+    # Requires search query as URL parameter
     # Search is case-insensitive
+    # Response: HTTP status code 200, along with matching users in JSON format
     def get(self):
         args = self.post_args.parse_args()
         users = User.query.all()

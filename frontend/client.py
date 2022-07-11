@@ -1,14 +1,13 @@
 from flask import Flask, render_template, request, redirect, flash, session
 from functools import wraps
 from modules import endpoint
-from threading import Timer
 import secrets, webbrowser
 app = Flask(__name__)
 
 ################################################################################
 #
-#							Authentication  API demo
-#							  Author: Leon Philip
+#					Authentication  API demo
+#					  Author: Leon Philip
 #
 ###############################################################################
 
@@ -137,4 +136,4 @@ def reset_password():
 	return render_template('reset_password.html', response=response, error=error)
 
 if __name__ == '__main__':
-	app.run(port=4000, debug=False)
+	app.run(port=8080, debug=False)
