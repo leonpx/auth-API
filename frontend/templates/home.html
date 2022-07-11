@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+  <head>
+    <meta charset="utf-8">
+    <title>Auth-API</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  </head>
+  <body>
+    <div class="center">
+	    <h1> Welcome {{ session['user_name'] }}!</h1>
+      <div class="nav">
+        <a href="{{ url_for('filter_users')}}">
+          <button class="navbtn">Search for users</button>
+        </a>
+        <a href="{{ url_for('delete_account')}}">
+          <button class="navbtn">Delete account</button>
+        </a>
+      <form action="/logout" method="post">
+        <button class="logoutbtn">Sign Out</button>
+      </form>
+
+  </body>
+</html>

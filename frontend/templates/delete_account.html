@@ -7,32 +7,21 @@
   </head>
   <body>
     <div class="center">
-      <h1>Register</h1>
+      <h1>Delete account</h1>
       {% if error %}
         <div class="error">
           <span class="closebtn" onclick="this.parentElement.style.display='none';">&times;</span>
           {{error}}
         </div>
       {% endif %}
-      <form action="/register" method="post">
-        <div class="txt_field">
-          <input type="text" name="name" id="name" required>
-          <span></span>
-          <label>Name</label>
-        </div>
-        <div class="txt_field">
-          <input type="email" name="email" id="email" required>
-          <span></span>
-          <label>Email</label>
-        </div>
+      <form action="/delete_account" method="post">
         <div class="txt_field">
           <input type="password" name="password" id="password" required>
-          <span></span>
           <label>Password</label>
         </div>
-        <input type="submit" value="Register">
+        <button class="deletebtn">Delete account</button>
         <div class="signup_link">
-          Already have an account? <a href="{{ url_for('index') }}">Sign in</a>
+          <a href="{{ url_for('home') }}">Go to home</a>
         </div>
       </form>
     </div>

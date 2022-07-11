@@ -1,4 +1,4 @@
-import requests, logging
+import requests
 
 base_url = 'http://localhost:5000/api/'
 
@@ -50,9 +50,7 @@ def request_password_reset(email):
     request_body = {'email': email}
     response = requests.post(base_url + 'user/password', json=request_body)
     ret = False, "An error occured"
-    if response.status_code == 400:
-        ret = False, response.json()['message']
-    elif response.status_code == 202:
+    if response.status_code == 202:
         ret = True, response.json()['message']
     print('request_password_reset(): ' + str(ret))
     return ret
@@ -107,17 +105,3 @@ def logout(session_token):
         ret = True, "Success!"
     print('logout(): ' + str(ret))
     return ret
-
-if __name__ == '__main__':
-    status, user = register_user("a", "b@mail.com", "password2")
-    status, user = login('b@mail.com', 'password2')
-    status, result = get_user(user['id'], user['session_token'])
-    status, result = logout(user['session_token'])
-    #status, result = request_password_reset(user['email'])
-    #status, result = reset_password("UkitzAyybuFhdg6rvsy6ABdl6cZJuBcyn3hDxcwCcxI", "password2")
-    status, result = delete_user(user['id'], "password2")
-    status, user = login('b@mail.com', 'password2')
-    result = filter_users("a")
-
-
-    

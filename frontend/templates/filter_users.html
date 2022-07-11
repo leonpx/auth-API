@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+  <head>
+    <meta charset="utf-8">
+    <title>Auth-API</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  </head>
+  <body>
+    <div class="center">
+      <h1>Filter users</h1>
+      <form action="/filter_users" method="post">
+        <div class="txt_field">
+          <input type="text" name="query" id="query" required>
+          <label>Query</label>
+        </div>
+        <input type="submit" value="Search">
+        <div class="signup_link">
+          <a href="{{ url_for('home') }}">Go to home</a>
+        </div>
+      </form>
+    	{% if table %}  
+		    <div class="table">
+		    	{{table|safe}}
+		    </div>
+	    {% endif %}
+    </div>
+
+  </body>
+</html>

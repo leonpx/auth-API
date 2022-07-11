@@ -194,7 +194,7 @@ class ResetPassword(Resource):
         self.put_args.add_argument("new_password", type=str, help="New user password is required.", required=True)
 
         # Predefined HTTP responses
-        self.msg_invalid_email = {"message": "No user with that email exists."}, 400
+        self.msg_reset_request = {"message": "If an account with that email exists, an email has been sent with a reset token."}, 202
         self.msg_invalid_token = {"message": "Invalid reset token."}, 401
 
     def email_reset_token(self, resettoken, email):
@@ -214,12 +214,12 @@ class ResetPassword(Resource):
     def post(self):
         email = self.post_args.parse_args()['email']
         user = User.query.filter_by(email=email).first()
-        if user is None: return self.msg_invalid_email
-        resettoken = secrets.token_urlsafe()
-        user.reset_token = resettoken
-        db.session.commit()
-        self.email_reset_token(resettoken, email)
-        return {"message": "Reset email has been sent."}, 202
+        if user is not None:
+            resettoken = secrets.token_urlsafe()
+            user.reset_token = resettoken
+            db.session.commit()
+            self.email_reset_token(resettoken, email)
+        return self.msg_reset_request
 
     # Rests the user password using their password reset token
     def put(self):
